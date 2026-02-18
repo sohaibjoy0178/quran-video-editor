@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom API exposed to renderer
@@ -12,18 +12,24 @@ const api = {
 
   // ─── File Dialogs ──────────────────────────────────────
   dialog: {
-    openFile: (filters: Array<{ name: string; extensions: string[] }>) =>
-      ipcRenderer.invoke('dialog:openFile', filters),
-    saveFile: (defaultName: string) => ipcRenderer.invoke('dialog:saveFile', defaultName)
+    openFile: (
+      filters: Array<{ name: string; extensions: string[] }>
+    ): Promise<string | undefined> => ipcRenderer.invoke('dialog:openFile', filters),
+    saveFile: (defaultName: string): Promise<string | undefined> =>
+      ipcRenderer.invoke('dialog:saveFile', defaultName)
   },
 
   // ─── Gemini AI ─────────────────────────────────────────
   gemini: {
-    analyze: (audioPath: string) => ipcRenderer.invoke('gemini:analyze', audioPath),
-    testConnection: () => ipcRenderer.invoke('gemini:testConnection'),
-    onProgress: (callback: (data: { status: string; error?: boolean }) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: { status: string; error?: boolean }) =>
-        callback(data)
+    analyze: (audioPath: string): Promise<{ metadata?: unknown; captions?: unknown[] }> =>
+      ipcRenderer.invoke('gemini:analyze', audioPath),
+    testConnection: (): Promise<{ success: boolean; message: string }> =>
+      ipcRenderer.invoke('gemini:testConnection'),
+    onProgress: (callback: (data: { status: string; error?: boolean }) => void): (() => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        data: { status: string; error?: boolean }
+      ): void => callback(data)
       ipcRenderer.on('gemini:progress', handler)
       return () => ipcRenderer.removeListener('gemini:progress', handler)
     }
@@ -31,6 +37,7 @@ const api = {
 
   // ─── File System ───────────────────────────────────────
   files: {
+    getPath: (file: File) => webUtils.getPathForFile(file),
     write: (path: string, buffer: ArrayBuffer) => ipcRenderer.invoke('file:save', path, buffer)
   },
 
@@ -51,8 +58,8 @@ if (process.contextIsolated) {
     console.error(error)
   }
 } else {
-  // @ts-ignore
+  // @ts-ignore: Expose to window for non-isolated contexts
   window.electron = electronAPI
-  // @ts-ignore
+  // @ts-ignore: Expose to window for non-isolated contexts
   window.api = api
 }

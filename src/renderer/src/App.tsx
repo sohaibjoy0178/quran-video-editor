@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Toolbar } from './components/Toolbar'
 import { Sidebar } from './components/Sidebar'
 import { VideoPreview } from './components/VideoPreview'
@@ -8,7 +8,7 @@ import { RenderDialog } from './components/RenderDialog'
 import { loadPersistedSettings } from './stores/editorStore'
 import '../src/styles/index.css'
 
-function App() {
+function App(): React.ReactElement {
   const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
@@ -23,6 +23,7 @@ function App() {
       <Timeline />
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <RenderDialog />
+      <div className="developer-credit">Developed by sohaibislamjoy</div>
     </div>
   )
 }

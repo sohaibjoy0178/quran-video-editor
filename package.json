@@ -1,6 +1,6 @@
 {
   "name": "quran-video-editor",
-  "version": "1.0.0",
+  "version": "5.0.0",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
   "author": "example.com",
@@ -26,6 +26,8 @@
     "@google/generative-ai": "^0.24.1",
     "@types/uuid": "^10.0.0",
     "electron-store": "^11.0.2",
+    "mp4-muxer": "^5.2.2",
+    "mp4box": "^2.3.0",
     "react-rnd": "^10.5.2",
     "uuid": "^13.0.0",
     "video.js": "^8.23.6",

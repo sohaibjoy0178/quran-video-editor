@@ -11,8 +11,13 @@ interface DialogAPI {
   saveFile: (defaultName: string) => Promise<string | null>
 }
 
+interface GeminiResult {
+  metadata: { surah: string; verses: string }
+  captions: Array<{ start: number; end: number; arabic: string; bengali: string }>
+}
+
 interface GeminiAPI {
-  analyze: (audioPath: string) => Promise<any>
+  analyze: (audioPath: string) => Promise<GeminiResult>
   testConnection: () => Promise<{ success: boolean; message: string }>
   onProgress: (callback: (data: { status: string; error?: boolean }) => void) => () => void
 }
@@ -45,6 +50,7 @@ interface CaptionsAPI {
 }
 
 interface FilesAPI {
+  getPath: (file: File) => string
   write: (path: string, buffer: ArrayBuffer) => Promise<{ success: boolean; error?: string }>
 }
 

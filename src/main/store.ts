@@ -65,10 +65,10 @@ const DEFAULTS: StoreSchema = {
   lastProjectDir: ''
 }
 
-// electron-store v8 is ESM-only â€” use dynamic import
-let storeInstance: any = null
+// electron-store v8 is ESM-only — use dynamic import
+let storeInstance: unknown = null
 
-async function getStoreInstance(): Promise<any> {
+async function getStoreInstance(): Promise<unknown> {
   if (storeInstance) return storeInstance
   const { default: Store } = await import('electron-store')
   storeInstance = new Store({
@@ -80,24 +80,26 @@ async function getStoreInstance(): Promise<any> {
 
 export function registerStoreHandlers(): void {
   ipcMain.removeHandler('store:get')
-  ipcMain.handle('store:get', async (_event, key: string) => {
-    const store = await getStoreInstance()
+  ipcMain.handle('store:get', async (_event, key: string): Promise<unknown> => {
+    const store = (await getStoreInstance()) as { get: (k: string) => unknown }
     return store.get(key)
   })
 
   ipcMain.removeHandler('store:set')
-  ipcMain.handle('store:set', async (_event, key: string, value: unknown) => {
-    const store = await getStoreInstance()
+  ipcMain.handle('store:set', async (_event, key: string, value: unknown): Promise<void> => {
+    const store = (await getStoreInstance()) as { set: (k: string, v: unknown) => void }
     store.set(key, value)
   })
 
   ipcMain.removeHandler('store:getAll')
-  ipcMain.handle('store:getAll', async () => {
-    const store = await getStoreInstance()
+  ipcMain.handle('store:getAll', async (): Promise<unknown> => {
+    const store = (await getStoreInstance()) as { store: unknown }
     return store.store
   })
 }
 
-export async function getStore(): Promise<any> {
+export type { StoreSchema }
+
+export async function getStore(): Promise<unknown> {
   return getStoreInstance()
 }

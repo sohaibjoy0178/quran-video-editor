@@ -37,7 +37,22 @@ export interface CaptionStyle {
   shadowColor: string
   shadowBlur: number
   positionY: number
-  animation?: 'none' | 'fade-in' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'bounce-up' | 'bounce-down' | 'elastic-left' | 'elastic-right' | 'zoom-in' | 'zoom-out' | 'cinematic' | 'typewriter' | 'pop-in'
+  animation?:
+    | 'none'
+    | 'fade-in'
+    | 'slide-up'
+    | 'slide-down'
+    | 'slide-left'
+    | 'slide-right'
+    | 'bounce-up'
+    | 'bounce-down'
+    | 'elastic-left'
+    | 'elastic-right'
+    | 'zoom-in'
+    | 'zoom-out'
+    | 'cinematic'
+    | 'typewriter'
+    | 'pop-in'
 }
 
 export interface RenderSettings {
@@ -46,6 +61,7 @@ export interface RenderSettings {
   enableSlowMo: boolean
   slowMoFps: number
   videoFilter: 'none' | 'cinematic' | 'bw' | 'warm' | 'cool'
+  crossfadeEnabled: boolean
 }
 
 interface EditorState {
@@ -56,6 +72,7 @@ interface EditorState {
   audioDuration: number
   videoWidth: number
   videoHeight: number
+  aspectRatio: '16:9' | '9:16' | '1:1'
 
   // Playback
   currentTime: number
@@ -89,6 +106,7 @@ interface EditorState {
   setVideoDuration: (d: number) => void
   setAudioDuration: (d: number) => void
   setVideoResolution: (w: number, h: number) => void
+  setAspectRatio: (ratio: '16:9' | '9:16' | '1:1') => void
   setCurrentTime: (t: number) => void
   setIsPlaying: (p: boolean) => void
   setCaptions: (c: CaptionSegment[]) => void
@@ -115,6 +133,7 @@ export const useEditorStore = create<EditorState>((set) => ({
   audioDuration: 0,
   videoWidth: 1920,
   videoHeight: 1080,
+  aspectRatio: '16:9',
 
   // Playback
   currentTime: 0,
@@ -147,7 +166,8 @@ export const useEditorStore = create<EditorState>((set) => ({
     bitrate: '8M',
     enableSlowMo: false,
     slowMoFps: 60,
-    videoFilter: 'none'
+    videoFilter: 'none',
+    crossfadeEnabled: true
   },
   isRendering: false,
   renderProgress: 0,
@@ -168,6 +188,10 @@ export const useEditorStore = create<EditorState>((set) => ({
   setVideoDuration: (d) => set({ videoDuration: d }),
   setAudioDuration: (d) => set({ audioDuration: d }),
   setVideoResolution: (w, h) => set({ videoWidth: w, videoHeight: h }),
+  setAspectRatio: (ratio) => {
+    window.api.store.set('aspectRatio', ratio)
+    set({ aspectRatio: ratio })
+  },
   setCurrentTime: (t) => set({ currentTime: t }),
   setIsPlaying: (p) => set({ isPlaying: p }),
   setCaptions: (c) => set({ captions: c }),
@@ -208,15 +232,17 @@ export const useEditorStore = create<EditorState>((set) => ({
 // Load persisted settings from electron-store on app startup
 export async function loadPersistedSettings(): Promise<void> {
   try {
-    const [captionSettings, renderSettings, watermark] = await Promise.all([
+    const [captionSettings, renderSettings, watermark, aspectRatio] = await Promise.all([
       window.api.store.get('captionSettings'),
       window.api.store.get('renderSettings'),
-      window.api.store.get('watermark')
+      window.api.store.get('watermark'),
+      window.api.store.get('aspectRatio')
     ])
     const store = useEditorStore.getState()
     if (captionSettings) store.setCaptionStyle(captionSettings as CaptionStyle)
     if (renderSettings) store.setRenderSettings(renderSettings as RenderSettings)
     if (watermark) store.setWatermark(watermark as WatermarkConfig)
+    if (aspectRatio) store.setAspectRatio(aspectRatio as '16:9' | '9:16' | '1:1')
   } catch (e) {
     console.warn('Failed to load persisted settings:', e)
   }

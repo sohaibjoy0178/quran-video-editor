@@ -5,30 +5,42 @@ import { useEditorStore } from '../stores/editorStore'
  * Hook for frame-accurate caption sync using requestVideoFrameCallback.
  * Falls back to requestAnimationFrame for browsers without RVFC support.
  */
-export function useVideoSync(mediaRef: React.RefObject<HTMLMediaElement | null>) {
+export function useVideoSync(mediaRef: React.RefObject<HTMLMediaElement | null>): {
+  startSync: () => void
+  stopSync: () => void
+} {
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime)
   const rafId = useRef<number>(0)
+  const cbRef = useRef<((now: number, metadata: { mediaTime: number }) => void) | null>(null)
 
   const onFrame = useCallback(
-    (_now: number, metadata: { mediaTime: number }) => {
+    (now: number, metadata: { mediaTime: number }): void => {
+      void now
       setCurrentTime(metadata.mediaTime)
-      if (mediaRef.current && 'requestVideoFrameCallback' in mediaRef.current) {
-        ;(mediaRef.current as any).requestVideoFrameCallback(onFrame)
+      const media = mediaRef.current
+      if (media && 'requestVideoFrameCallback' in media) {
+        // Use cbRef to avoid recursion error during variable declaration
+        const m = media as unknown as { requestVideoFrameCallback: (cb: unknown) => void }
+        m.requestVideoFrameCallback(cbRef.current!)
       }
     },
     [setCurrentTime, mediaRef]
   )
 
-  const startSync = useCallback(() => {
+  // Initialize cbRef
+  useEffect(() => {
+    cbRef.current = onFrame
+  }, [onFrame])
+
+  const startSync = useCallback((): void => {
     const media = mediaRef.current
     if (!media) return
 
     if ('requestVideoFrameCallback' in media) {
-      ;(media as any).requestVideoFrameCallback(onFrame)
+      const m = media as unknown as { requestVideoFrameCallback: (cb: unknown) => void }
+      m.requestVideoFrameCallback(onFrame)
     } else {
-      // Fallback: rAF-based sync
-      // Fallback: rAF-based sync
-      const tick = () => {
+      const tick = (): void => {
         if (media && !media.paused) {
           setCurrentTime(media.currentTime)
         }
@@ -38,7 +50,7 @@ export function useVideoSync(mediaRef: React.RefObject<HTMLMediaElement | null>)
     }
   }, [mediaRef, onFrame, setCurrentTime])
 
-  const stopSync = useCallback(() => {
+  const stopSync = useCallback((): void => {
     if (rafId.current) {
       cancelAnimationFrame(rafId.current)
       rafId.current = 0

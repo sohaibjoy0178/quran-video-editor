@@ -68,7 +68,6 @@ ipcMain.handle('dialog:saveFile', async (_event, defaultName: string) => {
 
 // ─── IPC: Save Caption Images ────────────────────────────────────────
 
-
 // ─── App Lifecycle ────────────────────────────────────────────────────
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.quraneditor.app')
@@ -79,18 +78,19 @@ app.whenReady().then(() => {
 
   // Register all IPC handlers
   registerStoreHandlers()
-//   registerFFmpegHandlers() // Removed: migrating to client-side MediaRecorder
+  //   registerFFmpegHandlers() // Removed: migrating to client-side MediaRecorder
   registerGeminiHandlers()
-  
+
   // ─── IPC: Write File (for saving Blobs) ──────────────────────────────
   ipcMain.handle('file:save', async (_event, filePath: string, buffer: ArrayBuffer) => {
-      try {
-          writeFileSync(filePath, Buffer.from(buffer))
-          return { success: true }
-      } catch (e: any) {
-          console.error('Failed to save file:', e)
-          return { success: false, error: e.message }
-      }
+    try {
+      writeFileSync(filePath, Buffer.from(buffer))
+      return { success: true }
+    } catch (e: unknown) {
+      const error = e as Error
+      console.error('Failed to save file:', error)
+      return { success: false, error: error.message }
+    }
   })
 
   createWindow()

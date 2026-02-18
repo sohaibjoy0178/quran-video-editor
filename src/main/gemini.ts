@@ -1,23 +1,26 @@
-
 import { ipcMain } from 'electron'
 import { GoogleGenerativeAI, SchemaType, GenerationConfig } from '@google/generative-ai'
 import { GoogleAIFileManager, FileState } from '@google/generative-ai/server'
 import { getStore } from './store'
 
 interface RawCaption {
-    start: string
-    end: string
-    arabic: string
-    bengali: string
+  start: string
+  end: string
+  arabic: string
+  bengali: string
 }
 
 interface ProcessedCaption {
-    start: number
-    end: number
-    arabic: string
-    bengali: string
-    arabicLines?: string[]
-    bengaliLines?: string[]
+  start: number
+  end: number
+  arabic: string
+  bengali: string
+  arabicLines?: string[]
+  bengaliLines?: string[]
+}
+
+interface IStore {
+  get(key: string): unknown
 }
 
 const GENERATION_CONFIG: GenerationConfig = {
@@ -54,30 +57,28 @@ const GENERATION_CONFIG: GenerationConfig = {
   }
 }
 
-const SYSTEM_PROMPT = `You are an expert video caption extraction system specializing in Quran recitation videos.
-YOUR PRIMARY TASK: Extract the EXACT captions shown on-screen in the reference video and replicate them with precise timestamps.
+const SYSTEM_PROMPT = `You are a high-precision video transcription and synchronization agent. Your specialized task is to extract text from Quran recitation videos with 100% fidelity.
 
-STRICT RULES:
-1. **Character-for-Character Accuracy**: matching the on-screen text EXACTLY.
-   - Include ALL Arabic diacritics (Tashkeel) exactly as shown.
-   - Include ALL Bengali punctuation and formatting.
-   - Do NOT correct spelling or grammar. Copy what you see.
-2. **Timestamps & Continuity**:
-   - 'start' and 'end' must be in MM:SS format (e.g., "00:01", "01:25").
-   - **CRITICAL**: Ensure captions are CONTINUOUS. If a reciter prolongs a verse (Tajweed), the caption must REMAIN VISIBLE until the next verse begins.
-   - Do NOT leave gaps between captions unless there is a long silence (> 3 seconds) or a complete visual break.
-   - Align start times perfectly with the visual appearance of new text.
-   - Extend 'end' times to meet the 'start' of the next caption to prevent flickering.
-3. **Segmentation**:
-   - Create a new caption block WHENEVER the on-screen text changes.
-   - Do not combine multiple screen changes into one.
-4. **Metadata**:
-   - Extract the Surah Name (English/Transliterated) and Verse Numbers (e.g., "1-5") if visible or inferred.
-5. **No Hallucinations**:
-   - If a segment has NO on-screen text, do NOT output a caption for that time.
+### GOAL:
+Replicate the EXACT captions seen on the reference video screen. What the user sees on the screen is what you must provide.
 
-OUTPUT FORMAT:
-JSON with 'metadata' and 'captions' array.`
+### STRICT RULES for TEXT EXTRACTION:
+1. **Character-for-Character Accuracy**: Every symbol, diacritic (Tashkeel), and punctuation mark must match the screen EXACTLY.
+2. **Arabic Excellence**: Maintain all Quranic symbols (end-of-verse markers, sajda signs, etc.) if they are visible.
+3. **Bengali Translation**: Capture the exact Bengali translation text provided on screen. Do NOT use your own translation.
+4. **No Correction**: If there is a typo or specific stylistic choice on the screen, COPY IT. Do not correct it.
+
+### RULES for TIMESTAMPS & FLOW:
+1. **Millisecond Precision**: Use MM:SS.mmm format (e.g., "00:04.250"). This ensures the text appears at the exact moment the video shows it.
+2. **Seamless Continuity**: Subtitles must remain on screen until the very moment the NEXT subtitle appears. 
+   - Set the 'end' time of a caption to be IDENTICAL to the 'start' time of the following caption.
+   - Do NOT leave gaps unless there is a complete visual removal of text from the screen for more than 2 seconds.
+3. **Visual Triggers**: Sync start/end times precisely to the visual fade-in/fade-out or hard cut of the text.
+
+### OUTPUT FORMAT:
+Provide a strictly valid JSON object with:
+- 'metadata': { 'surah': '...', 'verses': '...' }
+- 'captions': Array of { 'start', 'end', 'arabic', 'bengali' }`
 
 function parseTime(timeStr: string): number {
   if (!timeStr) return 0
@@ -91,30 +92,9 @@ function parseTime(timeStr: string): number {
   return parseFloat(timeStr)
 }
 
-function wrapText(text: string, limit: number, isChar = false): string[] {
-    if (!text) return []
-    const words = text.split(' ')
-    const lines: string[] = []
-    let currentLine = ''
-
-    for (const word of words) {
-        const testLine = currentLine ? `${currentLine} ${word}` : word
-        const length = isChar ? testLine.length : testLine.split(' ').length
-        
-        if (length > limit && currentLine) {
-            lines.push(currentLine)
-            currentLine = word
-        } else {
-            currentLine = testLine
-        }
-    }
-    if (currentLine) lines.push(currentLine)
-    return lines
-}
-
 export function registerGeminiHandlers(): void {
   ipcMain.handle('gemini:analyze', async (event, mediaPath: string) => {
-    const store = await getStore()
+    const store = (await getStore()) as IStore
     const apiKey = String(store.get('geminiApiKey'))
 
     if (!apiKey) {
@@ -123,13 +103,15 @@ export function registerGeminiHandlers(): void {
 
     const sendProgress = (status: string, error = false): void => {
       try {
-          event.sender.send('gemini:progress', { status, error })
-      } catch (e) { /* ignore */ }
+        event.sender.send('gemini:progress', { status, error })
+      } catch {
+        /* ignore */
+      }
     }
 
     try {
       sendProgress('Preparing video analysis...')
-      
+
       const fileManager = new GoogleAIFileManager(apiKey)
       const genAI = new GoogleGenerativeAI(apiKey)
       const model = genAI.getGenerativeModel({
@@ -156,7 +138,7 @@ export function registerGeminiHandlers(): void {
       }
 
       sendProgress('Generating captions...')
-      
+
       try {
         const result = await model.generateContent([
           { text: SYSTEM_PROMPT },
@@ -170,50 +152,49 @@ export function registerGeminiHandlers(): void {
 
         const responseText = result.response.text()
         const json = JSON.parse(responseText)
-        
+
         const captions: ProcessedCaption[] = (json.captions || []).map((cap: RawCaption) => ({
           start: parseTime(cap.start),
           end: parseTime(cap.end),
           arabic: cap.arabic,
           bengali: cap.bengali
         }))
-        
+
         // Post-processing: Gap Filling
         // Close gaps aggressively to ensure captions persist during recitation pauses.
         // If the gap between end[i] and start[i+1] is reasonable (< 15s), extend end[i].
+        // Post-processing: Resolve overlaps & Gap Filling
         for (let i = 0; i < captions.length - 1; i++) {
-            const current = captions[i]
-            const next = captions[i+1]
-            const gap = next.start - current.end
-            
-            if (gap > 0 && gap < 15.0) {
-                current.end = next.start
-            }
+          const current = captions[i]
+          const next = captions[i + 1]
+
+          // 1. Force end of current to be start of next if there's an overlap
+          if (current.end > next.start) {
+            current.end = next.start
+          }
+
+          // 2. Fill gaps (extend end to next start if gap < 5.0 seconds)
+          const gap = next.start - current.end
+          if (gap > 0 && gap < 5.0) {
+            current.end = next.start
+          }
         }
 
-        // Post-process lines (word wrap)
-        const processedCaptions = captions.map((c: ProcessedCaption) => ({
-          ...c,
-          arabicLines: wrapText(c.arabic, 6), 
-          bengaliLines: wrapText(c.bengali, 35, true)
-        }))
-
+        // Result
         const metadata = {
-            surah: json.metadata?.surah || 'Unknown',
-            verses: json.metadata?.verses || 'Unknown'
+          surah: json.metadata?.surah || 'Unknown',
+          verses: json.metadata?.verses || 'Unknown'
         }
 
-        sendProgress(`Analysis complete! Extracted ${processedCaptions.length} captions.`)
-        
+        sendProgress(`Analysis complete! Extracted ${captions.length} captions.`)
+
         return {
-            metadata,
-            captions: processedCaptions
+          metadata,
+          captions
         }
-
       } finally {
         await fileManager.deleteFile(uploadResult.file.name)
       }
-
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       sendProgress(`Error: ${errorMessage}`, true)
